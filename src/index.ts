@@ -6,6 +6,7 @@ import {
   InvokeCommandOutput,
 } from "@aws-sdk/client-lambda";
 import { randomUUID } from "crypto";
+import { parse } from "url";
 
 const TARGET = process.env.TARGET;
 const LAMBDA_NAME = "function";
@@ -25,20 +26,35 @@ console.log(`🚀 Mock WebSocket server running on ws://0.0.0.0:8000`);
 
 wss.on("connection", async (ws, req) => {
   const connectionId = randomUUID();
+  const parsedUrl = parse(req.url || "", true);
+  const queryParams = parsedUrl.query;
+
   console.log(`🔗 New WebSocket connection: ${connectionId}`);
 
-  await invokeLambda("$connect", "CONNECT", connectionId, null);
+  await invokeLambda("$connect", "CONNECT", connectionId, null, queryParams);
 
   ws.on("message", async (message) => {
     console.log(`📩 Received: ${message}`);
 
-    await invokeLambda("$default", "MESSAGE", connectionId, message.toString());
+    await invokeLambda(
+      "$default",
+      "MESSAGE",
+      connectionId,
+      message.toString(),
+      queryParams
+    );
   });
 
   ws.on("close", async () => {
     console.log(`❌ Disconnected: ${connectionId}`);
 
-    await invokeLambda("$disconnect", "DISCONNECT", connectionId, null);
+    await invokeLambda(
+      "$disconnect",
+      "DISCONNECT",
+      connectionId,
+      null,
+      queryParams
+    );
   });
 });
 
@@ -46,7 +62,8 @@ async function invokeLambda(
   routeKey: string,
   eventType: string,
   connectionId: string,
-  body: string | null
+  body: string | null,
+  queryStringParameters: Record<string, string | string[] | undefined>
 ) {
   const event = {
     requestContext: {
@@ -57,6 +74,7 @@ async function invokeLambda(
       apiId: API_ID,
       stage: STAGE,
     },
+    queryStringParameters: queryStringParameters,
     body: body || null,
     isBase64Encoded: false,
   };
