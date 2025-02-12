@@ -5,15 +5,9 @@ ENV AWS_ACCESS_KEY_ID=fake
 ENV AWS_SECRET_ACCESS_KEY=fake
 
 WORKDIR /app
-
-COPY package.json package-lock.json ./
-
-RUN npm install
-RUN npm install -g typescript
-
-COPY . .
-
-RUN tsc
+COPY package.json package.json
+RUN npm install --production
+COPY dist dist
 
 EXPOSE 8000
 
