@@ -1,0 +1,27 @@
+{
+  "name": "bref-local-api-gateway-socket",
+  "version": "1.0.0",
+  "description": "Run WebSocket API Gateway locally against your Docker Lambda functions",
+  "repository": "anthonyledru/bref-local-api-gateway-socket",
+  "main": "dist/index.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && docker buildx build --load -t anthonyledru/bref-local-api-gateway-socket .",
+    "docker-publish": "npm run build && docker buildx build --push --platform linux/amd64,linux/arm64 -t anthonyledru/bref-local-api-gateway-socket .",
+    "start": "node dist/index.js"
+  },
+  "author": "Anthony LEDRU",
+  "devDependencies": {
+    "@types/node": "^22.13.1",
+    "@types/ws": "^8.5.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@aws-sdk/client-lambda": "^3.744.0",
+    "axios": "^1.7.9",
+    "ws": "^8.18.0"
+  }
+}
