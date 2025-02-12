@@ -7,6 +7,7 @@ import {
 } from "@aws-sdk/client-lambda";
 import { randomUUID } from "crypto";
 import { parse } from "url";
+import PQueue from "p-queue";
 
 const TARGET = process.env.TARGET;
 const LAMBDA_NAME = "function";
@@ -20,6 +21,8 @@ const client = new LambdaClient({
   endpoint: TARGET,
 });
 
+const queue = new PQueue({ concurrency: 1 });
+
 const wss = new WebSocketServer({ host: "0.0.0.0", port: 8000 });
 
 console.log(`🚀 Mock WebSocket server running on ws://0.0.0.0:8000`);
@@ -31,29 +34,29 @@ wss.on("connection", async (ws, req) => {
 
   console.log(`🔗 New WebSocket connection: ${connectionId}`);
 
-  await invokeLambda("$connect", "CONNECT", connectionId, null, queryParams);
+  queue.add(() =>
+    invokeLambda("$connect", "CONNECT", connectionId, null, queryParams)
+  );
 
   ws.on("message", async (message) => {
     console.log(`📩 Received: ${message}`);
 
-    await invokeLambda(
-      "$default",
-      "MESSAGE",
-      connectionId,
-      message.toString(),
-      queryParams
+    queue.add(() =>
+      invokeLambda(
+        "$default",
+        "MESSAGE",
+        connectionId,
+        message.toString(),
+        queryParams
+      )
     );
   });
 
   ws.on("close", async () => {
     console.log(`❌ Disconnected: ${connectionId}`);
 
-    await invokeLambda(
-      "$disconnect",
-      "DISCONNECT",
-      connectionId,
-      null,
-      queryParams
+    queue.add(() =>
+      invokeLambda("$disconnect", "DISCONNECT", connectionId, null, queryParams)
     );
   });
 });
