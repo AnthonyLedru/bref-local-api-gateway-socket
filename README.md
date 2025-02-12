@@ -43,3 +43,15 @@ services:
     volumes:
       - .:/var/task:ro
 ```
+
+Example to send a message to a WebSocket client:
+
+```bash
+curl -X POST http://localhost:8001/@connections/123 -d '{"message": "Hello, world!"}'
+```
+
+Example to manually disconnect a WebSocket client:
+
+```bash
+curl -X DELETE http://localhost:8001/@connections/123
+```
