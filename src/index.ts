@@ -1,4 +1,4 @@
-import { WebSocketServer } from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 import {
   LambdaClient,
   InvokeCommand,
@@ -8,10 +8,10 @@ import {
 import { randomUUID } from "crypto";
 import { parse } from "url";
 import PQueue from "p-queue";
+import express, { Application, Request, Response } from "express";
 
 const TARGET = process.env.TARGET;
 const LAMBDA_NAME = "function";
-
 const DOMAIN_NAME = "localhost";
 const API_ID = "mock-api-id";
 const STAGE = "dev";
@@ -23,6 +23,8 @@ const client = new LambdaClient({
 
 const queue = new PQueue({ concurrency: 1 });
 
+const connections = new Map<string, WebSocket>();
+
 const wss = new WebSocketServer({ host: "0.0.0.0", port: 8000 });
 
 console.log(`🚀 Mock WebSocket server running on ws://0.0.0.0:8000`);
@@ -33,6 +35,8 @@ wss.on("connection", async (ws, req) => {
   const queryParams = parsedUrl.query;
 
   console.log(`🔗 New WebSocket connection: ${connectionId}`);
+
+  connections.set(connectionId, ws);
 
   queue.add(() =>
     invokeLambda("$connect", "CONNECT", connectionId, null, queryParams)
@@ -54,6 +58,8 @@ wss.on("connection", async (ws, req) => {
 
   ws.on("close", async () => {
     console.log(`❌ Disconnected: ${connectionId}`);
+
+    connections.delete(connectionId);
 
     queue.add(() =>
       invokeLambda("$disconnect", "DISCONNECT", connectionId, null, queryParams)
@@ -99,3 +105,39 @@ async function invokeLambda(
     console.error("🔥 Lambda invocation failed:", error);
   }
 }
+
+const app: Application = express();
+app.use(express.json());
+
+app.post("/@connections/:connectionId", (req: Request, res: Response) => {
+  const { connectionId } = req.params;
+  const message = req.body.message;
+
+  const ws = connections.get(connectionId);
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(message);
+    console.log(`📤 Sent message to ${connectionId}:`, message);
+    res.status(200).json({ success: true });
+  } else {
+    res.status(404).json({ error: "Connection not found or closed." });
+  }
+});
+
+app.delete("/@connections/:connectionId", (req: Request, res: Response) => {
+  const { connectionId } = req.params;
+  const ws = connections.get(connectionId);
+
+  if (ws) {
+    ws.close();
+    connections.delete(connectionId);
+    console.log(`❌ Disconnected ${connectionId}`);
+    res.status(200).json({ success: true });
+  } else {
+    res.status(404).json({ error: "Connection not found or already closed." });
+  }
+});
+
+app.listen(8001, () => {
+  console.log(`📡 HTTP Server running on http://0.0.0.0:8001`);
+});
