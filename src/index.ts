@@ -107,24 +107,74 @@ async function invokeLambda(
 }
 
 const app: Application = express();
+
+app.use(express.text());
 app.use(express.json());
 
-app.post("/@connections/:connectionId", (req: Request, res: Response) => {
-  const { connectionId } = req.params;
-  const message = req.body.message;
+app.post(
+  "/@connections/:connectionId",
+  express.raw({ type: "*/*" }),
+  (req: Request, res: Response) => {
+    console.log("New message:", req.params.connectionId, req.body);
 
+    const { connectionId } = req.params;
+
+    const ws = connections.get(connectionId);
+
+    if (!ws) {
+      res
+        .status(410)
+        .json({ error: "GoneException: Connection no longer exists" });
+    } else if (ws.readyState !== WebSocket.OPEN) {
+      connections.delete(connectionId);
+      res.status(410).json({ error: "GoneException: Connection is closed" });
+    } else {
+      let messageData: string;
+
+      if (Buffer.isBuffer(req.body)) {
+        messageData = req.body.toString("utf-8");
+      } else {
+        messageData = String(req.body);
+      }
+
+      try {
+        ws.send(messageData);
+        console.log(`📤 Sent message to ${connectionId}:`, messageData);
+        res.status(200).json({ success: true });
+      } catch (err) {
+        console.error(`🔥 Error sending message to ${connectionId}:`, err);
+        res.status(500).json({ error: "Internal Server Error" });
+      }
+    }
+  }
+);
+
+app.get("/@connections/:connectionId", (req: Request, res: Response) => {
+  console.log("Get connection:", req.params.connectionId);
+
+  const { connectionId } = req.params;
   const ws = connections.get(connectionId);
 
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(message);
-    console.log(`📤 Sent message to ${connectionId}:`, message);
-    res.status(200).json({ success: true });
+  if (!ws) {
+    res
+      .status(410)
+      .json({ error: "GoneException: Connection no longer exists" });
+  } else if (ws.readyState !== WebSocket.OPEN) {
+    connections.delete(connectionId);
+    res.status(410).json({ error: "GoneException: Connection is closed" });
   } else {
-    res.status(404).json({ error: "Connection not found or closed." });
+    res.status(200).json({
+      sourceIp: "127.0.0.1",
+      userAgent: "Chrome",
+      connectedAt: new Date().toISOString(),
+      lastActiveAt: new Date().toISOString(),
+    });
   }
 });
 
 app.delete("/@connections/:connectionId", (req: Request, res: Response) => {
+  console.log("Delete connection:", req.params.connectionId);
+
   const { connectionId } = req.params;
   const ws = connections.get(connectionId);
 
@@ -134,7 +184,9 @@ app.delete("/@connections/:connectionId", (req: Request, res: Response) => {
     console.log(`❌ Disconnected ${connectionId}`);
     res.status(200).json({ success: true });
   } else {
-    res.status(404).json({ error: "Connection not found or already closed." });
+    res
+      .status(410)
+      .json({ error: "GoneException: Connection no longer exists" });
   }
 });
 
